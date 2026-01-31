@@ -1,0 +1,30 @@
+accelerate
+cn2an
+cython
+descript-audiotools
+einops
+ffmpeg-python
+g2p-en
+jieba
+json5
+keras
+librosa
+matplotlib
+modelscope
+munch
+numba
+numpy
+omegaconf
+opencv-python
+pandas
+safetensors
+sentencepiece
+tensorboard
+textstat
+tokenizers
+torch
+torchaudio
+tqdm
+transformers>=4.52.0
+wetext>=0.0.9; sys_platform != 'linux'
+WeTextProcessing; sys_platform == 'linux'
