@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-kaola-indextts2"
 description = "ComfyUI custom nodes for IndexTTS-2 zero-shot text-to-speech synthesis with advanced emotion control"
-version = "1.0.1"
+version = "1.1.0"
 license = { text = "Apache-2.0" }
 dependencies = [
     "torch>=2.0.0",
