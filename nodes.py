@@ -711,6 +711,7 @@ class IndexTTS2ScriptDubbing:
         # Cache: same character voice -> reuse temp file path
         voice_file_cache = {}
         audio_segments = []  # list of (entry, audio_numpy)
+        saved_files = []  # UI download list
         success_count = 0
 
         try:
@@ -749,6 +750,7 @@ class IndexTTS2ScriptDubbing:
                 # Save emotion segment if requested
                 if seg_dir:
                     _fmt = self._fmt_time
+                    subfolder = f"{segments_prefix}_segments"
                     emo_fname = f"{entry['index']:02d}_emo_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
                     emo_seg_wav = emo_segment["waveform"]
                     if emo_seg_wav.dim() == 3:
@@ -758,6 +760,7 @@ class IndexTTS2ScriptDubbing:
                         emo_seg_wav.cpu().numpy().astype(np.float32),
                         int(emo_segment["sample_rate"]),
                     )
+                    saved_files.append({"filename": emo_fname, "subfolder": subfolder, "type": "output"})
 
                 try:
                     result = model.infer(
@@ -781,12 +784,14 @@ class IndexTTS2ScriptDubbing:
                     # Save synthesized segment if requested
                     if seg_dir:
                         _fmt = self._fmt_time
+                        subfolder = f"{segments_prefix}_segments"
                         tts_fname = f"{entry['index']:02d}_tts_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
                         _save_wav(
                             os.path.join(seg_dir, tts_fname),
                             wav_np.astype(np.float32),
                             output_sr,
                         )
+                        saved_files.append({"filename": tts_fname, "subfolder": subfolder, "type": "output"})
 
                 except Exception as e:
                     print(f"[ScriptDubbing] 第 {entry['index']} 条合成失败: {e}")
@@ -803,7 +808,11 @@ class IndexTTS2ScriptDubbing:
             # --- Step 5: Assemble timeline ---
             assembled = _assemble_timeline(audio_segments, srt_entries, output_sr)
             waveform = torch.from_numpy(assembled).unsqueeze(0)  # (1, 1, N)
-            return ({"waveform": waveform, "sample_rate": output_sr},)
+            audio_out = {"waveform": waveform, "sample_rate": output_sr}
+
+            if saved_files:
+                return {"ui": {"audio": saved_files}, "result": (audio_out,)}
+            return (audio_out,)
 
         finally:
             # --- Step 6: Cleanup ---
