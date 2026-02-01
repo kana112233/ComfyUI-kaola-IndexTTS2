@@ -282,27 +282,47 @@ def _assemble_timeline(audio_segments, srt_entries, output_sr):
     srt_entries: the full list of parsed SRT entries (for computing total duration)
     output_sr: sample rate of the output
 
+    Each segment is clipped so it never bleeds past the next segment's start,
+    preventing overlap and the "repeated audio" artifact.
+
     Returns numpy array of shape (1, total_samples).
     """
     if not audio_segments:
         raise RuntimeError("No audio segments to assemble")
 
-    # Total duration = max end_ms across all entries
-    max_end_ms = max(e["end_ms"] for e in srt_entries)
-    # Add a small tail buffer (500ms)
+    # Sort by start time to guarantee correct order
+    audio_segments.sort(key=lambda x: x[0]["start_ms"])
+
+    # Total duration: consider the last segment may extend beyond its SRT end_ms
+    last_entry, last_audio = audio_segments[-1]
+    last_seg_ms = last_audio.shape[-1] * 1000 / output_sr
+    max_end_ms = max(
+        max(e["end_ms"] for e in srt_entries),
+        last_entry["start_ms"] + last_seg_ms,
+    )
     total_samples = int((max_end_ms + 500) * output_sr / 1000)
 
     buffer = np.zeros((1, total_samples), dtype=np.float32)
 
-    for entry, audio_np in audio_segments:
+    for i, (entry, audio_np) in enumerate(audio_segments):
         start_sample = int(entry["start_ms"] * output_sr / 1000)
-        seg_len = audio_np.shape[-1]
 
         # Ensure mono
         if audio_np.ndim == 2:
             seg = audio_np[0]
         else:
             seg = audio_np
+
+        seg_len = len(seg)
+
+        # Clip: don't extend past the next segment's start position
+        if i + 1 < len(audio_segments):
+            next_start_sample = int(
+                audio_segments[i + 1][0]["start_ms"] * output_sr / 1000
+            )
+            max_len = next_start_sample - start_sample
+            if max_len > 0:
+                seg_len = min(seg_len, max_len)
 
         # Don't write past buffer end
         available = total_samples - start_sample
@@ -317,7 +337,6 @@ def _assemble_timeline(audio_segments, srt_entries, output_sr):
     nonzero = np.nonzero(abs_buf > 1e-6)[0]
     if len(nonzero) > 0:
         last_nonzero = nonzero[-1]
-        # Keep a small tail (0.5s)
         tail = int(0.5 * output_sr)
         trim_end = min(last_nonzero + tail, total_samples)
         buffer = buffer[:, :trim_end]

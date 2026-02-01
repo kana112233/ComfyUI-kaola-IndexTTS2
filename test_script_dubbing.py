@@ -194,6 +194,45 @@ def test_assemble_timeline_empty():
     print("  PASS: test_assemble_timeline_empty")
 
 
+def test_assemble_timeline_no_overlap():
+    """Test that long segments are clipped at the next segment's start — no bleed-over."""
+    sr = 16000
+
+    entries = [
+        {"index": 1, "start_ms": 0, "end_ms": 2000, "character": "A", "dialogue": "Hi"},
+        {"index": 2, "start_ms": 1000, "end_ms": 3000, "character": "B", "dialogue": "Hey"},
+    ]
+
+    # clip1 is 3 seconds long — much longer than the 1s gap before clip2
+    clip1 = np.ones((1, int(3.0 * sr)), dtype=np.float32) * 0.5
+    clip2 = np.ones((1, int(1.0 * sr)), dtype=np.float32) * -0.5
+
+    segments = [
+        (entries[0], clip1),
+        (entries[1], clip2),
+    ]
+
+    result = _assemble_timeline(segments, entries, sr)
+
+    # At 0s: clip1 value (0.5)
+    assert abs(result[0, 0] - 0.5) < 1e-5
+
+    # At 1s: clip2 should have overwritten — clip1 must be clipped here
+    pos_1s = int(1.0 * sr)
+    assert abs(result[0, pos_1s] - (-0.5)) < 1e-5, (
+        f"Expected -0.5 at 1s (clip2), got {result[0, pos_1s]} — clip1 bled over"
+    )
+
+    # Right after clip2 ends (2s + a little): should be silence
+    pos_after = int(2.0 * sr) + 10
+    if pos_after < result.shape[1]:
+        assert abs(result[0, pos_after]) < 1e-5, (
+            f"Expected silence after clip2, got {result[0, pos_after]}"
+        )
+
+    print("  PASS: test_assemble_timeline_no_overlap")
+
+
 def test_node_input_types():
     """Test that the node class INPUT_TYPES is properly structured."""
     from nodes import IndexTTS2ScriptDubbing
@@ -231,6 +270,7 @@ if __name__ == "__main__":
     test_extract_emotion_segment()
     test_assemble_timeline()
     test_assemble_timeline_empty()
+    test_assemble_timeline_no_overlap()
     test_node_input_types()
 
     print("\nAll tests passed!")
