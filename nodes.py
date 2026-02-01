@@ -24,7 +24,30 @@ _CACHE_LOCK = threading.RLock()
 
 def _get_model(config_path, model_dir, device, use_fp16, use_cuda_kernel, use_deepspeed):
     """Return a cached IndexTTS2 instance or create a new one."""
-    from indextts.infer_v2 import IndexTTS2
+    try:
+        from kaola_indextts.infer_v2 import IndexTTS2
+    except ImportError:
+        # Fallback to direct import if kaola_indextts is in sys.path as 'indextts'
+        # But here we prefer our local copy
+        import sys
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        kaola_path = os.path.join(current_dir, "kaola_indextts")
+        if kaola_path not in sys.path:
+            sys.path.insert(0, kaola_path)
+            
+        # We also need to make sure internal imports within indextts work.
+        # The easiest way is to alias 'indextts' to 'kaola_indextts' in sys.modules
+        # or just add the parent directory to sys.path so 'indextts' is found,
+        # but since we renamed it to 'kaola_indextts', we need to be careful.
+        # Strategy: Add 'kaola_indextts' directory to sys.path, but internal files expect 'from indextts...'
+        
+        # ACTUALLY: The best way is to rename the folder 'kaola_indextts' BACK to 'indextts' locally?
+        # No, that conflicts with installed package.
+        # We must fix proper imports.
+        # But fixing massive imports is risky.
+        # Let's try importing as 'kaola_indextts' and see if we can shim sys.modules.
+        
+        from kaola_indextts.infer_v2 import IndexTTS2
 
     key = (
         os.path.abspath(config_path),

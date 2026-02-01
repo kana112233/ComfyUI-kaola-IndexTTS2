@@ -25,6 +25,6 @@ tokenizers
 torch
 torchaudio
 tqdm
-transformers>=4.52.0
+transformers>=4.57.3
 wetext>=0.0.9; sys_platform != 'linux'
 WeTextProcessing; sys_platform == 'linux'
