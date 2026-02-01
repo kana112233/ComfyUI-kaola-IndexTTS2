@@ -34,9 +34,10 @@ git clone https://github.com/YOUR_USERNAME/ComfyUI-kaola-IndexTTS2.git
 cd ComfyUI-kaola-IndexTTS2
 ```
 
-## Example Workflow
+## Example Workflows
 
-The included [example_workflow.json](examples/example_workflow.json) demonstrates:
+- [example_workflow.json](examples/example_workflow.json) — Basic voice cloning and emotion control
+- [05_script_dubbing.json](examples/05_script_dubbing.json) — Multi-character script dubbing with SRT
 
 ### Step 1: Install Dependencies
 
@@ -141,6 +142,82 @@ Control emotions via natural language description.
 **Outputs:**
 - `audio` - Generated audio
 
+### 6. IndexTTS2 Script Dubbing (SRT)
+
+Multi-character script dubbing driven by SRT subtitles. Parses an SRT script with character names, matches each line to a voice reference, and assembles the synthesized audio onto the SRT timeline.
+
+**Required Inputs:**
+- `model` - IndexTTS2 model
+- `script_srt` - SRT format script (multiline, see format below)
+- `emo_alpha` - Emotion strength (0.0-2.0, default 1.0)
+- `temperature` - Randomness control (0.1-2.0, default 1.0)
+- `top_k` - Top-K sampling (0-100, default 0)
+- `top_p` - Top-P sampling (0.0-1.0, default 1.0)
+- `use_random` - Enable randomness (default False)
+- `save_segments` - Save individual emotion clips and synthesized clips as downloadable files (default False)
+- `segments_prefix` - Filename prefix for saved segments (default "dubbing")
+
+**Optional Inputs:**
+- `emo_audio_prompt` - Emotion reference audio (auto-sliced by SRT timestamps)
+- `voice_1` ~ `voice_7` - Up to 7 character voice reference audios
+- `voice_1_name` ~ `voice_7_name` - Character names corresponding to each voice (e.g., "唐僧")
+
+**Outputs:**
+- `audio` - Full assembled dubbed audio
+
+**SRT Script Format:**
+
+Supports standard multi-line SRT format:
+
+```
+1
+00:00:01,000 --> 00:00:03,000
+唐僧：悟空，你又调皮了。
+
+2
+00:00:04,000 --> 00:00:06,500
+孙悟空：师父，俺老孙冤枉啊！
+```
+
+Also supports compact single-line SRT:
+
+```
+1 00:00:01,000 --> 00:00:03,000 唐僧：悟空，你又调皮了。
+2 00:00:04,000 --> 00:00:06,500 孙悟空：师父，俺老孙冤枉啊！
+```
+
+**Character name** uses Chinese colon `：` or English colon `:` as separator.
+
+**Emotion text in parentheses** — add emotion descriptions after the character name:
+
+```
+1
+00:00:01,000 --> 00:00:03,000
+唐僧(高兴的说)：悟空，快来看。
+
+2
+00:00:04,000 --> 00:00:06,000
+孙悟空（愤怒）：俺老孙不服！
+```
+
+Both half-width `()` and full-width `（）` parentheses are supported.
+
+**Emotion Priority:**
+
+| Priority | Condition | Behavior |
+|---|---|---|
+| 1 (highest) | Parentheses emotion in script, e.g. `唐僧(高兴的说)：` | Forced `emo_text` mode, ignores audio emotion |
+| 2 | `emo_audio_prompt` connected, no parentheses | Slices emotion audio by SRT timestamp |
+| 3 (lowest) | Neither | Voice-only synthesis, no emotion control |
+
+**Segment Saving:**
+
+When `save_segments` is enabled, individual files are saved to `{output}/{segments_prefix}_segments/`:
+- `{index}_emo_{character}_{time}.wav` — Emotion audio slice for each line
+- `{index}_tts_{character}_{time}.wav` — Synthesized audio for each line
+
+These files appear in the ComfyUI output panel for download.
+
 > [!NOTE]
 > **Core Node Compatibility**: We have removed the custom Save/Load nodes to ensure 100% compatibility with ComfyUI core. Use standard **LoadAudio** for inputs and **SaveAudio** or **PreviewAudio** for outputs.
 
@@ -177,6 +254,22 @@ Control emotions via natural language description.
 4. Or provide separate `emo_text` for explicit emotion description
 5. Set `emo_alpha` around 0.6 for natural results
 
+### Multi-Character Script Dubbing
+
+1. Load model with **IndexTTS2 Model Loader**
+2. Add **IndexTTS2 Script Dubbing (SRT)** node
+3. Connect model output to the dubbing node
+4. Add **LoadAudio** nodes for each character's voice reference, connect to `voice_1`, `voice_2`, etc.
+5. Set `voice_1_name`, `voice_2_name` etc. to match character names in the SRT script (e.g., "唐僧", "孙悟空")
+6. (Optional) Add a **LoadAudio** for emotion reference audio, connect to `emo_audio_prompt`
+7. Write your SRT script in `script_srt`, using `角色名：台词` format
+8. (Optional) Add emotion descriptions in parentheses: `唐僧(高兴的说)：悟空，快来看。`
+9. Enable `save_segments` to export individual audio clips for review
+10. Connect output to **SaveAudio** or **PreviewAudio**
+
+> [!TIP]
+> An example workflow is available at [`examples/05_script_dubbing.json`](examples/05_script_dubbing.json). Import it directly into ComfyUI to get started quickly.
+
 ## Tips
 
 💡 **FP16 Mode**: Highly recommended for faster inference and lower VRAM usage with minimal quality loss
@@ -186,6 +279,10 @@ Control emotions via natural language description.
 💡 **Random Sampling**: Enabling `use_random` adds variety but may reduce voice cloning fidelity
 
 💡 **Audio Format**: Reference audio should be clear, with minimal background noise
+
+💡 **Voice Cloning Accuracy**: For best results, use 5-15 seconds of clean, single-speaker reference audio. Avoid background music or noise. Consistent speaking style in the reference yields more stable cloning.
+
+💡 **Script Dubbing Timeline**: If a synthesized clip is longer than the gap before the next SRT timestamp, the next clip is automatically pushed forward (no truncation). The output may be longer than the original SRT timeline.
 
 ## Troubleshooting
 
