@@ -636,6 +636,8 @@ class IndexTTS2ScriptDubbing:
             "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
             "top_p": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}),
             "use_random": ("BOOLEAN", {"default": False}),
+            "save_segments": ("BOOLEAN", {"default": False}),
+            "segments_prefix": ("STRING", {"default": "dubbing", "multiline": False}),
         }
 
         optional = {}
@@ -648,13 +650,16 @@ class IndexTTS2ScriptDubbing:
 
         return {"required": required, "optional": optional}
 
+    OUTPUT_NODE = True
+
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("audio",)
     FUNCTION = "generate"
     CATEGORY = "audio/IndexTTS2"
 
     def generate(self, model, script_srt, emo_audio_prompt, emo_alpha,
-                 temperature, top_k, top_p, use_random, **kwargs):
+                 temperature, top_k, top_p, use_random,
+                 save_segments, segments_prefix, **kwargs):
         from comfy.utils import ProgressBar
 
         # --- Step 1: Parse SRT ---
@@ -665,6 +670,14 @@ class IndexTTS2ScriptDubbing:
             )
         print(f"[ScriptDubbing] Parsed {len(srt_entries)} SRT entries")
         pbar = ProgressBar(len(srt_entries))
+
+        # --- Prepare segments output directory ---
+        seg_dir = None
+        if save_segments:
+            output_root = folder_paths.get_output_directory()
+            seg_dir = os.path.join(output_root, f"{segments_prefix}_segments")
+            os.makedirs(seg_dir, exist_ok=True)
+            print(f"[ScriptDubbing] 分段音频保存到: {seg_dir}")
 
         # --- Step 2: Build character -> voice AUDIO mapping ---
         voice_map = {}  # character_name -> AUDIO dict
@@ -704,6 +717,7 @@ class IndexTTS2ScriptDubbing:
             for idx, entry in enumerate(srt_entries):
                 dialogue = entry["dialogue"]
                 if not dialogue.strip():
+                    pbar.update(1)
                     continue
 
                 char_name = entry["character"] or "_default_"
@@ -732,6 +746,19 @@ class IndexTTS2ScriptDubbing:
                     f"台词=\"{dial_preview}\""
                 )
 
+                # Save emotion segment if requested
+                if seg_dir:
+                    _fmt = self._fmt_time
+                    emo_fname = f"{entry['index']:02d}_emo_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
+                    emo_seg_wav = emo_segment["waveform"]
+                    if emo_seg_wav.dim() == 3:
+                        emo_seg_wav = emo_seg_wav.squeeze(0)
+                    _save_wav(
+                        os.path.join(seg_dir, emo_fname),
+                        emo_seg_wav.cpu().numpy().astype(np.float32),
+                        int(emo_segment["sample_rate"]),
+                    )
+
                 try:
                     result = model.infer(
                         spk_audio_prompt=spk_path,
@@ -750,6 +777,17 @@ class IndexTTS2ScriptDubbing:
                     output_sr = audio_dict["sample_rate"]
                     audio_segments.append((entry, wav_np))
                     success_count += 1
+
+                    # Save synthesized segment if requested
+                    if seg_dir:
+                        _fmt = self._fmt_time
+                        tts_fname = f"{entry['index']:02d}_tts_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
+                        _save_wav(
+                            os.path.join(seg_dir, tts_fname),
+                            wav_np.astype(np.float32),
+                            output_sr,
+                        )
+
                 except Exception as e:
                     print(f"[ScriptDubbing] 第 {entry['index']} 条合成失败: {e}")
                 finally:
@@ -759,6 +797,8 @@ class IndexTTS2ScriptDubbing:
                 raise RuntimeError("所有条目合成均失败，请检查模型和输入。")
 
             print(f"[ScriptDubbing] 合成完成: {success_count}/{len(srt_entries)} 条成功")
+            if seg_dir:
+                print(f"[ScriptDubbing] 已保存 {success_count} 条合成分段 + 情绪切片到 {seg_dir}")
 
             # --- Step 5: Assemble timeline ---
             assembled = _assemble_timeline(audio_segments, srt_entries, output_sr)
@@ -768,3 +808,10 @@ class IndexTTS2ScriptDubbing:
         finally:
             # --- Step 6: Cleanup ---
             _cleanup(*temp_files)
+
+    @staticmethod
+    def _fmt_time(ms):
+        """Format milliseconds as MM分SS秒 for filenames."""
+        total_s = ms // 1000
+        m, s = divmod(total_s, 60)
+        return f"{m:02d}m{s:02d}s"
