@@ -18,6 +18,7 @@ from .nodes import (
     IndexTTS2EmotionAudio,
     IndexTTS2EmotionVector,
     IndexTTS2EmotionText,
+    IndexTTS2ScriptDubbing,
 )
 
 NODE_CLASS_MAPPINGS = {
@@ -26,6 +27,7 @@ NODE_CLASS_MAPPINGS = {
     "IndexTTS2EmotionAudio": IndexTTS2EmotionAudio,
     "IndexTTS2EmotionVector": IndexTTS2EmotionVector,
     "IndexTTS2EmotionText": IndexTTS2EmotionText,
+    "IndexTTS2ScriptDubbing": IndexTTS2ScriptDubbing,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -34,6 +36,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "IndexTTS2EmotionAudio": "IndexTTS2 Emotion (Audio)",
     "IndexTTS2EmotionVector": "IndexTTS2 Emotion (Vector)",
     "IndexTTS2EmotionText": "IndexTTS2 Emotion (Text)",
+    "IndexTTS2ScriptDubbing": "IndexTTS2 Script Dubbing (SRT)",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
