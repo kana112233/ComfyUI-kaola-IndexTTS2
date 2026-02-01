@@ -94,12 +94,17 @@ except ImportError:
     def _crop_past_key_values(*args, **kwargs): pass
     def _prepare_attention_mask(*args, **kwargs): pass
     def _prepare_token_type_ids(*args, **kwargs): pass
-from transformers.generation.configuration_utils import (
-    NEED_SETUP_CACHE_CLASSES_MAPPING,
-    QUANT_BACKEND_CLASSES_MAPPING,
-    GenerationConfig,
-    GenerationMode,
-)
+try:
+    from transformers.generation.configuration_utils import (
+        NEED_SETUP_CACHE_CLASSES_MAPPING,
+        QUANT_BACKEND_CLASSES_MAPPING,
+        GenerationConfig,
+        GenerationMode,
+    )
+except ImportError:
+    from transformers.generation.configuration_utils import GenerationConfig, GenerationMode
+    NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+    QUANT_BACKEND_CLASSES_MAPPING = {}
 from transformers.generation.logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
