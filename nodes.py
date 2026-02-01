@@ -645,6 +645,8 @@ class IndexTTS2ScriptDubbing:
 
     def generate(self, model, script_srt, emo_audio_prompt, emo_alpha,
                  temperature, top_k, top_p, use_random, **kwargs):
+        from comfy.utils import ProgressBar
+
         # --- Step 1: Parse SRT ---
         srt_entries = _parse_srt(script_srt)
         if not srt_entries:
@@ -652,6 +654,7 @@ class IndexTTS2ScriptDubbing:
                 "SRT 解析结果为空，请检查 script_srt 格式是否正确。"
             )
         print(f"[ScriptDubbing] Parsed {len(srt_entries)} SRT entries")
+        pbar = ProgressBar(len(srt_entries))
 
         # --- Step 2: Build character -> voice AUDIO mapping ---
         voice_map = {}  # character_name -> AUDIO dict
@@ -740,7 +743,8 @@ class IndexTTS2ScriptDubbing:
                     success_count += 1
                 except Exception as e:
                     print(f"[ScriptDubbing] 第 {entry['index']} 条合成失败: {e}")
-                    continue
+                finally:
+                    pbar.update(1)
 
             if success_count == 0:
                 raise RuntimeError("所有条目合成均失败，请检查模型和输入。")
