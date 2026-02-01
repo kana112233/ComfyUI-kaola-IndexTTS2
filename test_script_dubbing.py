@@ -42,6 +42,7 @@ def test_parse_srt_standard():
     assert entries[0]["start_ms"] == 1000
     assert entries[0]["end_ms"] == 3000
     assert entries[0]["character"] == "唐僧"
+    assert entries[0]["emotion"] == ""
     assert entries[0]["dialogue"] == "悟空，你又调皮了。"
 
     assert entries[1]["index"] == 2
@@ -66,8 +67,41 @@ Alice: Hello world!
     entries = _parse_srt(srt)
     assert len(entries) == 1
     assert entries[0]["character"] == "Alice"
+    assert entries[0]["emotion"] == ""
     assert entries[0]["dialogue"] == "Hello world!"
     print("  PASS: test_parse_srt_english_colon")
+
+
+def test_parse_srt_with_emotion():
+    """Test SRT with emotion descriptions in parentheses."""
+    srt = """1
+00:00:01,000 --> 00:00:03,000
+唐僧(高兴的说)：悟空，快来看。
+
+2
+00:00:04,000 --> 00:00:06,000
+孙悟空（愤怒）：俺老孙不服！
+
+3
+00:00:07,000 --> 00:00:09,000
+唐僧：普通台词，无情绪标注。
+"""
+    entries = _parse_srt(srt)
+    assert len(entries) == 3
+
+    assert entries[0]["character"] == "唐僧"
+    assert entries[0]["emotion"] == "高兴的说"
+    assert entries[0]["dialogue"] == "悟空，快来看。"
+
+    assert entries[1]["character"] == "孙悟空"
+    assert entries[1]["emotion"] == "愤怒"
+    assert entries[1]["dialogue"] == "俺老孙不服！"
+
+    assert entries[2]["character"] == "唐僧"
+    assert entries[2]["emotion"] == ""
+    assert entries[2]["dialogue"] == "普通台词，无情绪标注。"
+
+    print("  PASS: test_parse_srt_with_emotion")
 
 
 def test_parse_srt_empty():
@@ -94,26 +128,34 @@ Test
 
 
 def test_split_character_dialogue():
-    """Test character/dialogue splitting."""
-    # Chinese colon
-    c, d = _split_character_dialogue("唐僧：悟空，快走。")
-    assert c == "唐僧"
-    assert d == "悟空，快走。"
+    """Test character/emotion/dialogue splitting."""
+    # Chinese colon, no emotion
+    c, e, d = _split_character_dialogue("唐僧：悟空，快走。")
+    assert c == "唐僧" and e == "" and d == "悟空，快走。"
 
-    # English colon
-    c, d = _split_character_dialogue("Alice: Hello!")
-    assert c == "Alice"
-    assert d == "Hello!"
+    # English colon, no emotion
+    c, e, d = _split_character_dialogue("Alice: Hello!")
+    assert c == "Alice" and e == "" and d == "Hello!"
 
     # No character
-    c, d = _split_character_dialogue("这是一段旁白")
-    assert c == ""
-    assert d == "这是一段旁白"
+    c, e, d = _split_character_dialogue("这是一段旁白")
+    assert c == "" and e == "" and d == "这是一段旁白"
 
-    # Colon in dialogue (first colon splits)
-    c, d = _split_character_dialogue("角色: 说话：更多内容")
-    assert c == "角色"
-    assert d == "说话：更多内容"
+    # Colon in dialogue
+    c, e, d = _split_character_dialogue("角色: 说话：更多内容")
+    assert c == "角色" and d == "说话：更多内容"
+
+    # With emotion — half-width parentheses
+    c, e, d = _split_character_dialogue("唐僧(高兴的说): 悟空，快走。")
+    assert c == "唐僧" and e == "高兴的说" and d == "悟空，快走。"
+
+    # With emotion — full-width parentheses + Chinese colon
+    c, e, d = _split_character_dialogue("孙悟空（愤怒）：俺老孙不服！")
+    assert c == "孙悟空" and e == "愤怒" and d == "俺老孙不服！"
+
+    # With emotion — mixed
+    c, e, d = _split_character_dialogue("唐僧(悲伤地)：阿弥陀佛。")
+    assert c == "唐僧" and e == "悲伤地" and d == "阿弥陀佛。"
 
     print("  PASS: test_split_character_dialogue")
 
@@ -247,10 +289,10 @@ def test_node_input_types():
     req = inputs["required"]
     assert "model" in req
     assert "script_srt" in req
-    assert "emo_audio_prompt" in req
     assert "emo_alpha" in req
 
     opt = inputs["optional"]
+    assert "emo_audio_prompt" in opt, "emo_audio_prompt should be optional"
     for i in range(1, 8):
         assert f"voice_{i}" in opt, f"Missing voice_{i}"
         assert f"voice_{i}_name" in opt, f"Missing voice_{i}_name"
@@ -267,6 +309,7 @@ if __name__ == "__main__":
 
     test_parse_srt_standard()
     test_parse_srt_english_colon()
+    test_parse_srt_with_emotion()
     test_parse_srt_empty()
     test_parse_srt_timestamps()
     test_split_character_dialogue()

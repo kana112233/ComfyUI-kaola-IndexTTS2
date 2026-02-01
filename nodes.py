@@ -188,12 +188,13 @@ def _parse_srt(text):
                     content_lines.append(lines[i].strip())
                     i += 1
                 content = " ".join(content_lines)
-                character, dialogue = _split_character_dialogue(content)
+                character, emotion, dialogue = _split_character_dialogue(content)
                 entries.append({
                     "index": index,
                     "start_ms": start_ms,
                     "end_ms": end_ms,
                     "character": character,
+                    "emotion": emotion,
                     "dialogue": dialogue,
                 })
                 continue
@@ -215,13 +216,14 @@ def _parse_srt(text):
                 idx_part = before_ts.rstrip("|").strip()
                 if idx_part.isdigit():
                     index = int(idx_part)
-            character, dialogue = _split_character_dialogue(after_ts)
+            character, emotion, dialogue = _split_character_dialogue(after_ts)
             if dialogue:
                 entries.append({
                     "index": index,
                     "start_ms": start_ms,
                     "end_ms": end_ms,
                     "character": character,
+                    "emotion": emotion,
                     "dialogue": dialogue,
                 })
         i += 1
@@ -230,16 +232,25 @@ def _parse_srt(text):
 
 
 def _split_character_dialogue(content):
-    """Split 'Character: dialogue' into (character, dialogue).
+    """Split 'Character(emotion): dialogue' into (character, emotion, dialogue).
 
-    Supports both Chinese colon and English colon.
-    Returns ("", content) if no character prefix is found.
+    Supports:
+      - 唐僧(高兴的说): 台词
+      - 唐僧（愤怒）：台词
+      - 唐僧: 台词  (no emotion)
+      - 纯台词 (no character)
+
+    Returns (character, emotion, dialogue). emotion may be "".
     """
-    # Match "角色名：台词" or "角色名: 台词"
+    # Match "角色名(情绪)：台词" or "角色名: 台词"
+    m = re.match(r"^([^:：(（]+?)\s*[（(]([^)）]+)[)）]\s*[：:]\s*(.+)$", content, re.DOTALL)
+    if m:
+        return m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+    # No emotion, just character: dialogue
     m = re.match(r"^([^:：]+?)\s*[：:]\s*(.+)$", content, re.DOTALL)
     if m:
-        return m.group(1).strip(), m.group(2).strip()
-    return "", content.strip()
+        return m.group(1).strip(), "", m.group(2).strip()
+    return "", "", content.strip()
 
 
 def _extract_emotion_segment(emo_audio, start_ms, end_ms):
@@ -630,7 +641,6 @@ class IndexTTS2ScriptDubbing:
                 ),
                 "multiline": True,
             }),
-            "emo_audio_prompt": ("AUDIO",),
             "emo_alpha": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1}),
             "temperature": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 2.0, "step": 0.1}),
             "top_k": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
@@ -640,7 +650,9 @@ class IndexTTS2ScriptDubbing:
             "segments_prefix": ("STRING", {"default": "dubbing", "multiline": False}),
         }
 
-        optional = {}
+        optional = {
+            "emo_audio_prompt": ("AUDIO",),
+        }
         for i in range(1, cls.MAX_VOICES + 1):
             optional[f"voice_{i}"] = ("AUDIO",)
             optional[f"voice_{i}_name"] = ("STRING", {
@@ -657,7 +669,7 @@ class IndexTTS2ScriptDubbing:
     FUNCTION = "generate"
     CATEGORY = "audio/IndexTTS2"
 
-    def generate(self, model, script_srt, emo_audio_prompt, emo_alpha,
+    def generate(self, model, script_srt, emo_alpha,
                  temperature, top_k, top_p, use_random,
                  save_segments, segments_prefix, **kwargs):
         from comfy.utils import ProgressBar
@@ -670,6 +682,14 @@ class IndexTTS2ScriptDubbing:
             )
         print(f"[ScriptDubbing] Parsed {len(srt_entries)} SRT entries")
         pbar = ProgressBar(len(srt_entries))
+
+        # --- Optional emotion audio ---
+        emo_audio_prompt = kwargs.get("emo_audio_prompt")
+        use_emo = emo_audio_prompt is not None
+        if use_emo:
+            print("[ScriptDubbing] 使用情绪参考音频（按时间戳切片）")
+        else:
+            print("[ScriptDubbing] 未连接情绪参考音频，仅使用音色参考")
 
         # --- Prepare segments output directory ---
         seg_dir = None
@@ -732,12 +752,37 @@ class IndexTTS2ScriptDubbing:
                     voice_file_cache[voice_id] = spk_path
                 spk_path = voice_file_cache[voice_id]
 
-                # 4b: Emotion segment for this time range
-                emo_segment, emo_info = _extract_emotion_segment(
-                    emo_audio_prompt, entry["start_ms"], entry["end_ms"]
-                )
-                emo_path = _audio_to_temp_file(emo_segment)
-                temp_files.append(emo_path)
+                # 4b: Decide emotion mode
+                # Priority: emo_text in script (括号) > emo_audio_prompt
+                emo_text = entry.get("emotion", "")
+                emo_path = None
+                emo_info = "无"
+
+                if emo_text:
+                    # Forced emo_text mode — skip audio emotion
+                    emo_info = f"文本情绪=\"{emo_text}\""
+                elif use_emo:
+                    # Use emotion audio segment
+                    emo_segment, emo_info = _extract_emotion_segment(
+                        emo_audio_prompt, entry["start_ms"], entry["end_ms"]
+                    )
+                    emo_path = _audio_to_temp_file(emo_segment)
+                    temp_files.append(emo_path)
+
+                    # Save emotion segment if requested
+                    if seg_dir:
+                        _fmt = self._fmt_time
+                        subfolder = f"{segments_prefix}_segments"
+                        emo_fname = f"{entry['index']:02d}_emo_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
+                        emo_seg_wav = emo_segment["waveform"]
+                        if emo_seg_wav.dim() == 3:
+                            emo_seg_wav = emo_seg_wav.squeeze(0)
+                        _save_wav(
+                            os.path.join(seg_dir, emo_fname),
+                            emo_seg_wav.cpu().numpy().astype(np.float32),
+                            int(emo_segment["sample_rate"]),
+                        )
+                        saved_files.append({"filename": emo_fname, "subfolder": subfolder, "type": "output"})
 
                 # 4c: Infer
                 dial_preview = f"{dialogue[:30]}..." if len(dialogue) > 30 else dialogue
@@ -747,34 +792,26 @@ class IndexTTS2ScriptDubbing:
                     f"台词=\"{dial_preview}\""
                 )
 
-                # Save emotion segment if requested
-                if seg_dir:
-                    _fmt = self._fmt_time
-                    subfolder = f"{segments_prefix}_segments"
-                    emo_fname = f"{entry['index']:02d}_emo_{char_name}_{_fmt(entry['start_ms'])}-{_fmt(entry['end_ms'])}.wav"
-                    emo_seg_wav = emo_segment["waveform"]
-                    if emo_seg_wav.dim() == 3:
-                        emo_seg_wav = emo_seg_wav.squeeze(0)
-                    _save_wav(
-                        os.path.join(seg_dir, emo_fname),
-                        emo_seg_wav.cpu().numpy().astype(np.float32),
-                        int(emo_segment["sample_rate"]),
-                    )
-                    saved_files.append({"filename": emo_fname, "subfolder": subfolder, "type": "output"})
-
                 try:
-                    result = model.infer(
-                        spk_audio_prompt=spk_path,
-                        text=dialogue,
-                        output_path=None,
-                        emo_audio_prompt=emo_path,
-                        emo_alpha=emo_alpha,
-                        use_random=use_random,
-                        temperature=temperature,
-                        top_k=top_k,
-                        top_p=top_p,
-                        verbose=False,
-                    )
+                    infer_kwargs = {
+                        "spk_audio_prompt": spk_path,
+                        "text": dialogue,
+                        "output_path": None,
+                        "use_random": use_random,
+                        "temperature": temperature,
+                        "top_k": top_k,
+                        "top_p": top_p,
+                        "verbose": False,
+                    }
+                    if emo_text:
+                        # 括号情绪 → 强制 emo_text 模式
+                        infer_kwargs["use_emo_text"] = True
+                        infer_kwargs["emo_text"] = emo_text
+                    elif emo_path:
+                        # 无括号情绪 → 用情绪音频切片
+                        infer_kwargs["emo_audio_prompt"] = emo_path
+                        infer_kwargs["emo_alpha"] = emo_alpha
+                    result = model.infer(**infer_kwargs)
                     audio_dict = _result_to_audio(result)
                     wav_np = audio_dict["waveform"].squeeze(0).cpu().numpy()
                     output_sr = audio_dict["sample_rate"]
