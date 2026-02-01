@@ -195,7 +195,7 @@ def test_assemble_timeline_empty():
 
 
 def test_assemble_timeline_no_overlap():
-    """Test that long segments are clipped at the next segment's start — no bleed-over."""
+    """Test that a long segment pushes the next one forward instead of overlapping."""
     sr = 16000
 
     entries = [
@@ -203,9 +203,11 @@ def test_assemble_timeline_no_overlap():
         {"index": 2, "start_ms": 1000, "end_ms": 3000, "character": "B", "dialogue": "Hey"},
     ]
 
-    # clip1 is 3 seconds long — much longer than the 1s gap before clip2
-    clip1 = np.ones((1, int(3.0 * sr)), dtype=np.float32) * 0.5
-    clip2 = np.ones((1, int(1.0 * sr)), dtype=np.float32) * -0.5
+    # clip1 is 3s — longer than the 1s gap before clip2's SRT start
+    clip1_len = int(3.0 * sr)
+    clip2_len = int(1.0 * sr)
+    clip1 = np.ones((1, clip1_len), dtype=np.float32) * 0.5
+    clip2 = np.ones((1, clip2_len), dtype=np.float32) * -0.5
 
     segments = [
         (entries[0], clip1),
@@ -214,21 +216,19 @@ def test_assemble_timeline_no_overlap():
 
     result = _assemble_timeline(segments, entries, sr)
 
-    # At 0s: clip1 value (0.5)
+    # clip1 placed at 0s, full 3s preserved
     assert abs(result[0, 0] - 0.5) < 1e-5
+    assert abs(result[0, clip1_len - 1] - 0.5) < 1e-5, "clip1 should not be truncated"
 
-    # At 1s: clip2 should have overwritten — clip1 must be clipped here
-    pos_1s = int(1.0 * sr)
-    assert abs(result[0, pos_1s] - (-0.5)) < 1e-5, (
-        f"Expected -0.5 at 1s (clip2), got {result[0, pos_1s]} — clip1 bled over"
+    # clip2 pushed to after clip1 ends (at 3s, not 1s)
+    assert abs(result[0, clip1_len] - (-0.5)) < 1e-5, (
+        f"clip2 should start right after clip1 at sample {clip1_len}"
     )
 
-    # Right after clip2 ends (2s + a little): should be silence
-    pos_after = int(2.0 * sr) + 10
-    if pos_after < result.shape[1]:
-        assert abs(result[0, pos_after]) < 1e-5, (
-            f"Expected silence after clip2, got {result[0, pos_after]}"
-        )
+    # After clip2 ends: silence
+    after_both = clip1_len + clip2_len + 10
+    if after_both < result.shape[1]:
+        assert abs(result[0, after_both]) < 1e-5
 
     print("  PASS: test_assemble_timeline_no_overlap")
 

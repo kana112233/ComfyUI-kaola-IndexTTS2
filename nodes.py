@@ -282,63 +282,48 @@ def _assemble_timeline(audio_segments, srt_entries, output_sr):
     srt_entries: the full list of parsed SRT entries (for computing total duration)
     output_sr: sample rate of the output
 
-    Each segment is clipped so it never bleeds past the next segment's start,
-    preventing overlap and the "repeated audio" artifact.
+    Strategy: each segment is placed at max(srt_start, previous_segment_end),
+    so segments never overlap and are never truncated — they just push the
+    timeline forward naturally when they run longer than the SRT slot.
 
     Returns numpy array of shape (1, total_samples).
     """
     if not audio_segments:
         raise RuntimeError("No audio segments to assemble")
 
-    # Sort by start time to guarantee correct order
+    # Sort by start time
     audio_segments.sort(key=lambda x: x[0]["start_ms"])
 
-    # Total duration: consider the last segment may extend beyond its SRT end_ms
-    last_entry, last_audio = audio_segments[-1]
-    last_seg_ms = last_audio.shape[-1] * 1000 / output_sr
-    max_end_ms = max(
-        max(e["end_ms"] for e in srt_entries),
-        last_entry["start_ms"] + last_seg_ms,
-    )
-    total_samples = int((max_end_ms + 500) * output_sr / 1000)
+    # First pass: compute actual placement positions and total length
+    placements = []  # (start_sample, mono_segment)
+    cursor = 0  # tracks the end of the last placed segment (in samples)
 
-    buffer = np.zeros((1, total_samples), dtype=np.float32)
-
-    for i, (entry, audio_np) in enumerate(audio_segments):
-        start_sample = int(entry["start_ms"] * output_sr / 1000)
+    for entry, audio_np in audio_segments:
+        srt_start = int(entry["start_ms"] * output_sr / 1000)
 
         # Ensure mono
-        if audio_np.ndim == 2:
-            seg = audio_np[0]
-        else:
-            seg = audio_np
+        seg = audio_np[0] if audio_np.ndim == 2 else audio_np
 
-        seg_len = len(seg)
+        # Place at whichever is later: SRT start or end of previous segment
+        start_sample = max(srt_start, cursor)
+        end_sample = start_sample + len(seg)
+        cursor = end_sample
 
-        # Clip: don't extend past the next segment's start position
-        if i + 1 < len(audio_segments):
-            next_start_sample = int(
-                audio_segments[i + 1][0]["start_ms"] * output_sr / 1000
-            )
-            max_len = next_start_sample - start_sample
-            if max_len > 0:
-                seg_len = min(seg_len, max_len)
+        placements.append((start_sample, seg))
 
-        # Don't write past buffer end
-        available = total_samples - start_sample
-        if available <= 0:
-            continue
-        write_len = min(seg_len, available)
+    # Allocate buffer
+    total_samples = cursor + int(0.5 * output_sr)  # small tail
+    buffer = np.zeros((1, total_samples), dtype=np.float32)
 
-        buffer[0, start_sample:start_sample + write_len] = seg[:write_len]
+    for start_sample, seg in placements:
+        buffer[0, start_sample:start_sample + len(seg)] = seg
 
     # Trim trailing silence
     abs_buf = np.abs(buffer[0])
     nonzero = np.nonzero(abs_buf > 1e-6)[0]
     if len(nonzero) > 0:
-        last_nonzero = nonzero[-1]
         tail = int(0.5 * output_sr)
-        trim_end = min(last_nonzero + tail, total_samples)
+        trim_end = min(nonzero[-1] + tail, total_samples)
         buffer = buffer[:, :trim_end]
 
     return buffer
