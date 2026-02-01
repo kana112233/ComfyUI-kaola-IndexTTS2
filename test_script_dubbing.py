@@ -128,19 +128,22 @@ def test_extract_emotion_segment():
     audio = {"waveform": wav, "sample_rate": sr}
 
     # Normal segment: 2s to 5s
-    seg = _extract_emotion_segment(audio, 2000, 5000)
+    seg, info = _extract_emotion_segment(audio, 2000, 5000)
     expected_len = int(3.0 * sr)
     actual_len = seg["waveform"].shape[-1]
     assert abs(actual_len - expected_len) <= 1, f"Expected ~{expected_len}, got {actual_len}"
     assert seg["sample_rate"] == sr
+    assert "切片" in info
 
     # Too short segment (< 0.1s) -> fallback to full
-    seg = _extract_emotion_segment(audio, 1000, 1050)
+    seg, info = _extract_emotion_segment(audio, 1000, 1050)
     assert seg["waveform"].shape[-1] == n_samples, "Should fallback to full audio"
+    assert "fallback" in info
 
     # Out of range -> fallback
-    seg = _extract_emotion_segment(audio, 20000, 25000)
+    seg, info = _extract_emotion_segment(audio, 20000, 25000)
     assert seg["waveform"].shape[-1] == n_samples, "Should fallback to full audio"
+    assert "fallback" in info
 
     print("  PASS: test_extract_emotion_segment")
 

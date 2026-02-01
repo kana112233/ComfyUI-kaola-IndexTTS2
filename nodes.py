@@ -245,7 +245,7 @@ def _split_character_dialogue(content):
 def _extract_emotion_segment(emo_audio, start_ms, end_ms):
     """Extract a time segment from the emotion reference audio.
 
-    Returns a ComfyUI AUDIO dict for the segment [start_ms, end_ms].
+    Returns (audio_dict, info_str) where info_str describes what happened.
     Falls back to the full audio if the segment is too short (<0.1s) or out of range.
     """
     waveform = emo_audio["waveform"]  # (B, C, N)
@@ -257,22 +257,28 @@ def _extract_emotion_segment(emo_audio, start_ms, end_ms):
         wav = waveform
 
     total_samples = wav.shape[-1]
+    total_ms = total_samples * 1000 / sr
     start_sample = int(start_ms * sr / 1000)
     end_sample = int(end_ms * sr / 1000)
 
     min_samples = int(0.1 * sr)  # 0.1 seconds
 
-    if (start_sample >= total_samples or end_sample <= start_sample
-            or (end_sample - start_sample) < min_samples):
-        # Fallback: return full audio
-        return emo_audio
+    if start_sample >= total_samples:
+        info = f"fallback(全部 {total_ms:.0f}ms): 起始{start_ms}ms超出音频长度"
+        return emo_audio, info
+
+    if end_sample <= start_sample or (end_sample - start_sample) < min_samples:
+        info = f"fallback(全部 {total_ms:.0f}ms): 片段太短({end_ms - start_ms}ms)"
+        return emo_audio, info
 
     end_sample = min(end_sample, total_samples)
+    actual_ms = (end_sample - start_sample) * 1000 / sr
     segment = wav[:, start_sample:end_sample]
+    info = f"切片 {start_ms}~{end_ms}ms (实际{actual_ms:.0f}ms)"
     return {
         "waveform": segment.unsqueeze(0),  # (1, C, N)
         "sample_rate": sr,
-    }
+    }, info
 
 
 def _assemble_timeline(audio_segments, srt_entries, output_sr):
@@ -712,19 +718,18 @@ class IndexTTS2ScriptDubbing:
                 spk_path = voice_file_cache[voice_id]
 
                 # 4b: Emotion segment for this time range
-                emo_segment = _extract_emotion_segment(
+                emo_segment, emo_info = _extract_emotion_segment(
                     emo_audio_prompt, entry["start_ms"], entry["end_ms"]
                 )
                 emo_path = _audio_to_temp_file(emo_segment)
                 temp_files.append(emo_path)
 
                 # 4c: Infer
+                dial_preview = f"{dialogue[:30]}..." if len(dialogue) > 30 else dialogue
                 print(
                     f"[ScriptDubbing] [{idx+1}/{len(srt_entries)}] "
-                    f"角色={char_name}, 台词=\"{dialogue[:30]}...\""
-                    if len(dialogue) > 30 else
-                    f"[ScriptDubbing] [{idx+1}/{len(srt_entries)}] "
-                    f"角色={char_name}, 台词=\"{dialogue}\""
+                    f"角色={char_name}, 情绪={emo_info}, "
+                    f"台词=\"{dial_preview}\""
                 )
 
                 try:
