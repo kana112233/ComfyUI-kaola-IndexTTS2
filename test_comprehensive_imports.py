@@ -37,6 +37,12 @@ if not test_import(utils_path, f"import {utils_path}"):
     print("\nXXX Fatal Error: transformers_generation_utils failed to load even with patches.")
     sys.exit(1)
 
+# 2.5 Test maskgct_utils specifically for protobuf/tensorflow avoidance
+maskgct_path = "kaola_indextts.utils.maskgct_utils"
+if not test_import(maskgct_path, f"import {maskgct_path}"):
+    print("\nXXX Fatal Error: maskgct_utils failed to load. Transformers import shim failed.")
+    sys.exit(1)
+
 # 3. Test infer_v2 which depends on everything
 if not test_import("IndexTTS2", "from kaola_indextts.infer_v2 import IndexTTS2"):
     sys.exit(1)

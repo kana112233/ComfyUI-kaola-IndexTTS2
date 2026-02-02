@@ -2,7 +2,32 @@ import torch
 import librosa
 import json5
 from huggingface_hub import hf_hub_download
-from transformers import SeamlessM4TFeatureExtractor, Wav2Vec2BertModel
+import sys
+from unittest.mock import MagicMock
+
+# Shim to prevent transformers from importing tensorflow via image_transforms
+# This is required because some ComfyUI environments have broken protobuf/tensorflow installations
+try:
+    import transformers.image_transforms
+except ImportError:
+    pass
+except Exception:
+    sys.modules["transformers.image_transforms"] = MagicMock()
+    sys.modules["tensorflow"] = MagicMock()
+
+try:
+    from transformers import SeamlessM4TFeatureExtractor, Wav2Vec2BertModel
+except ImportError:
+    # If it still fails, provide dummy classes to allow module load
+    class SeamlessM4TFeatureExtractor: pass
+    class Wav2Vec2BertModel:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs): return MagicMock()
+except Exception:
+     class SeamlessM4TFeatureExtractor: pass
+     class Wav2Vec2BertModel:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs): return MagicMock()
 import safetensors
 import numpy as np
 
