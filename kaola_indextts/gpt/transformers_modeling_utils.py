@@ -49,7 +49,13 @@ from transformers.generation import GenerationConfig
 
 
 from transformers.integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
-from transformers.loss.loss_utils import LOSS_MAPPING
+try:
+    from transformers.loss.loss_utils import LOSS_MAPPING
+except ImportError:
+    LOSS_MAPPING = {}
+except Exception:
+    # Fallback for any other errors (like the protobuf/tensorflow import error)
+    LOSS_MAPPING = {}
 try:
     from transformers.pytorch_utils import (  # noqa: F401
         Conv1D,

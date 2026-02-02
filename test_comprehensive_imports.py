@@ -27,6 +27,10 @@ def test_import(module_name, import_cmd):
 if not test_import("kaola_indextts", "import kaola_indextts"):
     sys.exit(1)
 
+# 1.5 Test transformers_modeling_utils specifically for tensorflow avoidance
+if not test_import("transformers_modeling_utils", "import kaola_indextts.gpt.transformers_modeling_utils as tmu; print(f'   Checked LOSS_MAPPING: {type(tmu.LOSS_MAPPING)}')"):
+    sys.exit(1)
+
 # 2. Test transformers_generation_utils specifically as it has the most external deps
 utils_path = "kaola_indextts.gpt.transformers_generation_utils"
 if not test_import(utils_path, f"import {utils_path}"):
