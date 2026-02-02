@@ -50,54 +50,130 @@ from transformers.generation import GenerationConfig
 
 from transformers.integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from transformers.loss.loss_utils import LOSS_MAPPING
-from transformers.pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    id_tensor_storage,
-    is_torch_greater_or_equal_than_1_13,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
-)
+try:
+    from transformers.pytorch_utils import (  # noqa: F401
+        Conv1D,
+        apply_chunking_to_forward,
+        find_pruneable_heads_and_indices,
+        id_tensor_storage,
+        is_torch_greater_or_equal_than_1_13,
+        prune_conv1d_layer,
+        prune_layer,
+        prune_linear_layer,
+    )
+except ImportError:
+    class Conv1D(nn.Module):
+        def __init__(self, nf, nx):
+            super().__init__()
+            self.nf = nf
+            w = torch.empty(nx, nf)
+            nn.init.normal_(w, std=0.02)
+            self.weight = nn.Parameter(w)
+            self.bias = nn.Parameter(torch.zeros(nf))
+        def forward(self, x):
+            size_out = x.size()[:-1] + (self.nf,)
+            x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
+            return x.view(size_out)
+            
+    def apply_chunking_to_forward(*args, **kwargs): pass
+    def find_pruneable_heads_and_indices(*args, **kwargs): return [], []
+    def id_tensor_storage(*args, **kwargs): return 0
+    def is_torch_greater_or_equal_than_1_13(*args): return True
+    def prune_conv1d_layer(*args, **kwargs): pass
+    def prune_layer(*args, **kwargs): pass
+    def prune_linear_layer(*args, **kwargs): pass
 from transformers.quantizers import AutoHfQuantizer, HfQuantizer
 from transformers.quantizers.quantizers_utils import get_module_from_name
 from transformers.safetensors_conversion import auto_conversion
-from transformers.utils import (
-    ACCELERATE_MIN_VERSION,
-    ADAPTER_SAFE_WEIGHTS_NAME,
-    ADAPTER_WEIGHTS_NAME,
-    CONFIG_NAME,
-    DUMMY_INPUTS,
-    FLAX_WEIGHTS_NAME,
-    SAFE_WEIGHTS_INDEX_NAME,
-    SAFE_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
-    WEIGHTS_INDEX_NAME,
-    WEIGHTS_NAME,
-    ContextManagers,
-    ModelOutput,
-    PushToHubMixin,
-    cached_file,
-    copy_func,
-    download_url,
-    extract_commit_hash,
-    has_file,
-    is_accelerate_available,
-    is_bitsandbytes_available,
-    is_flash_attn_2_available,
-    is_offline_mode,
-    is_optimum_available,
-    is_peft_available,
-    is_remote_url,
-    is_safetensors_available,
-    is_torch_sdpa_available,
-    is_torch_xla_available,
-    logging,
-    replace_return_docstrings,
-    strtobool,
-)
+try:
+    from transformers.utils import (
+        ACCELERATE_MIN_VERSION,
+        ADAPTER_SAFE_WEIGHTS_NAME,
+        ADAPTER_WEIGHTS_NAME,
+        CONFIG_NAME,
+        DUMMY_INPUTS,
+        FLAX_WEIGHTS_NAME,
+        SAFE_WEIGHTS_INDEX_NAME,
+        SAFE_WEIGHTS_NAME,
+        TF2_WEIGHTS_NAME,
+        TF_WEIGHTS_NAME,
+        WEIGHTS_INDEX_NAME,
+        WEIGHTS_NAME,
+        ContextManagers,
+        ModelOutput,
+        PushToHubMixin,
+        cached_file,
+        copy_func,
+        download_url,
+        extract_commit_hash,
+        has_file,
+        is_accelerate_available,
+        is_bitsandbytes_available,
+        is_flash_attn_2_available,
+        is_offline_mode,
+        is_optimum_available,
+        is_peft_available,
+        is_remote_url,
+        is_safetensors_available,
+        is_torch_sdpa_available,
+        is_torch_xla_available,
+        logging,
+        replace_return_docstrings,
+        strtobool,
+    )
+except ImportError:
+    from transformers.utils import (
+        ACCELERATE_MIN_VERSION,
+        CONFIG_NAME,
+        DUMMY_INPUTS,
+        WEIGHTS_INDEX_NAME,
+        WEIGHTS_NAME,
+        ContextManagers,
+        ModelOutput,
+        PushToHubMixin,
+        copy_func,
+        logging,
+        strtobool,
+    )
+    # Define missing constants for older/newer transformers versions
+    ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
+    ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+    FLAX_WEIGHTS_NAME = "flax_model.msgpack"
+    SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
+    SAFE_WEIGHTS_NAME = "model.safetensors"
+    TF2_WEIGHTS_NAME = "tf_model.h5"
+    TF_WEIGHTS_NAME = "model.ckpt"
+    
+    def download_url(*args, **kwargs): return None
+    def is_offline_mode(): return False
+    def is_remote_url(*args, **kwargs): return False
+    def has_file(*args, **kwargs): return False
+    def cached_file(*args, **kwargs): return None
+    def extract_commit_hash(*args, **kwargs): return None
+    def is_safetensors_available(): return False
+    def is_accelerate_available(): return False
+    def is_flash_attn_2_available(): return False
+    def is_peft_available(): return False
+    def is_torch_sdpa_available(): return False
+    def is_torch_xla_available(): return False
+    
+    # Try importing optional utils if available, else Mock
+    try:
+        from transformers.utils import is_bitsandbytes_available
+    except ImportError:
+        def is_bitsandbytes_available(): return False
+        
+    try:
+        from transformers.utils import is_optimum_available
+    except ImportError:
+        def is_optimum_available(): return False
+
+    try:
+        from transformers.utils import replace_return_docstrings
+    except ImportError:
+        def replace_return_docstrings(*args, **kwargs): 
+            def decorator(func): return func
+            return decorator
 from transformers.utils.hub import convert_file_size_to_int, create_and_tag_model_card, get_checkpoint_shard_files
 from transformers.utils.import_utils import (
     ENV_VARS_TRUE_VALUES,

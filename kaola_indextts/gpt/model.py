@@ -10,8 +10,12 @@ from kaola_indextts.gpt.transformers_gpt2 import GPT2PreTrainedModel, GPT2Model
 
 # from transformers import GPT2Config, GPT2PreTrainedModel, LogitsProcessorList
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from transformers.utils.model_parallel_utils import (assert_device_map,
-                                                     get_device_map)
+try:
+    from transformers.utils.model_parallel_utils import (assert_device_map,
+                                                         get_device_map)
+except ImportError:
+    def assert_device_map(*args, **kwargs): pass
+    def get_device_map(*args, **kwargs): return None
 
 from kaola_indextts.gpt.conformer_encoder import ConformerEncoder
 from kaola_indextts.gpt.perceiver import PerceiverResampler

@@ -32,7 +32,10 @@ import transformers
 
 from kaola_indextts.gpt.transformers_generation_utils import GenerationMixin
 from kaola_indextts.gpt.transformers_modeling_utils import PreTrainedModel
-from transformers.modeling_utils import SequenceSummary
+try:
+    from transformers.modeling_utils import SequenceSummary
+except ImportError:
+    class SequenceSummary: pass
 
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
 from transformers.modeling_outputs import (
@@ -44,7 +47,10 @@ from transformers.modeling_outputs import (
 )
 # from transformers.modeling_utils import PreTrainedModel, SequenceSummary
 
-from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+try:
+    from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+except ImportError:
+    from kaola_indextts.gpt.transformers_modeling_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from transformers.utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -56,7 +62,11 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+try:
+    from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+except ImportError:
+    def assert_device_map(*args, **kwargs): pass
+    def get_device_map(*args, **kwargs): return None
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 

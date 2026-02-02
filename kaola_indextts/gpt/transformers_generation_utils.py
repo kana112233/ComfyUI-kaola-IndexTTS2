@@ -105,34 +105,62 @@ except ImportError:
     from transformers.generation.configuration_utils import GenerationConfig, GenerationMode
     NEED_SETUP_CACHE_CLASSES_MAPPING = {}
     QUANT_BACKEND_CLASSES_MAPPING = {}
-from transformers.generation.logits_process import (
-    EncoderNoRepeatNGramLogitsProcessor,
-    EncoderRepetitionPenaltyLogitsProcessor,
-    EpsilonLogitsWarper,
-    EtaLogitsWarper,
-    ExponentialDecayLengthPenalty,
-    ForcedBOSTokenLogitsProcessor,
-    ForcedEOSTokenLogitsProcessor,
-    HammingDiversityLogitsProcessor,
-    InfNanRemoveLogitsProcessor,
-    LogitNormalization,
-    LogitsProcessorList,
-    MinLengthLogitsProcessor,
-    MinNewTokensLengthLogitsProcessor,
-    MinPLogitsWarper,
-    NoBadWordsLogitsProcessor,
-    NoRepeatNGramLogitsProcessor,
-    PrefixConstrainedLogitsProcessor,
-    RepetitionPenaltyLogitsProcessor,
-    SequenceBiasLogitsProcessor,
-    SuppressTokensAtBeginLogitsProcessor,
-    SuppressTokensLogitsProcessor,
-    TemperatureLogitsWarper,
-    TopKLogitsWarper,
-    TopPLogitsWarper,
-    TypicalLogitsWarper,
-    UnbatchedClassifierFreeGuidanceLogitsProcessor,
-)
+try:
+    from transformers.generation.logits_process import (
+        EncoderNoRepeatNGramLogitsProcessor,
+        EncoderRepetitionPenaltyLogitsProcessor,
+        EpsilonLogitsWarper,
+        EtaLogitsWarper,
+        ExponentialDecayLengthPenalty,
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
+        HammingDiversityLogitsProcessor,
+        InfNanRemoveLogitsProcessor,
+        LogitNormalization,
+        LogitsProcessorList,
+        MinLengthLogitsProcessor,
+        MinNewTokensLengthLogitsProcessor,
+        MinPLogitsWarper,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        PrefixConstrainedLogitsProcessor,
+        RepetitionPenaltyLogitsProcessor,
+        SequenceBiasLogitsProcessor,
+        SuppressTokensAtBeginLogitsProcessor,
+        SuppressTokensLogitsProcessor,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
+        TypicalLogitsWarper,
+        UnbatchedClassifierFreeGuidanceLogitsProcessor,
+    )
+except ImportError:
+    class EncoderNoRepeatNGramLogitsProcessor: pass
+    class EncoderRepetitionPenaltyLogitsProcessor: pass
+    class EpsilonLogitsWarper: pass
+    class EtaLogitsWarper: pass
+    class ExponentialDecayLengthPenalty: pass
+    class ForcedBOSTokenLogitsProcessor: pass
+    class ForcedEOSTokenLogitsProcessor: pass
+    class HammingDiversityLogitsProcessor: pass
+    class InfNanRemoveLogitsProcessor: pass
+    class LogitNormalization: pass
+    class LogitsProcessorList: pass
+    class MinLengthLogitsProcessor: pass
+    class MinNewTokensLengthLogitsProcessor: pass
+    class MinPLogitsWarper: pass
+    class NoBadWordsLogitsProcessor: pass
+    class NoRepeatNGramLogitsProcessor: pass
+    class PrefixConstrainedLogitsProcessor: pass
+    class RepetitionPenaltyLogitsProcessor: pass
+    class SequenceBiasLogitsProcessor: pass
+    class SuppressTokensAtBeginLogitsProcessor: pass
+    class SuppressTokensLogitsProcessor: pass
+    class TemperatureLogitsWarper: pass
+    class TopKLogitsWarper: pass
+    class TopPLogitsWarper: pass
+    class TypicalLogitsWarper: pass
+    class UnbatchedClassifierFreeGuidanceLogitsProcessor: pass
 from transformers.generation.stopping_criteria import (
     ConfidenceCriteria,
     EosTokenCriteria,
